@@ -12,19 +12,21 @@ const allowedOrigins = [
 let serviceAccount;
 
 if (process.env.FIREBASE_CREDENTIALS) {
-  // RAILWAY MODE: Pulls from the digital vault!
+  // RAILWAY MODE: Pulls from the digital vault and fixes broken newline characters!
   try {
-    serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+    // This regex replaces escaped \\n strings with actual \n line breaks!
+    const parsedKey = process.env.FIREBASE_CREDENTIALS.replace(/\\n/g, '\n');
+    serviceAccount = JSON.parse(parsedKey);
   } catch (error) {
-    console.error("CRITICAL ERROR: Failed to parse FIREBASE_CREDENTIALS in Railway.");
-    process.exit(1); // Kill the server if the vault is broken
+    console.error("CRITICAL ERROR: Failed to parse FIREBASE_CREDENTIALS in Railway.", error);
+    process.exit(1); 
   }
 } else {
-  // LAPTOP MODE: Fails gracefully if the file is missing
+  // LAPTOP MODE: Reads the local file.
   try {
     serviceAccount = require('./firebase-key.json');
   } catch (error) {
-    console.warn("WARNING: firebase-key.json not found! (This is normal if running on Railway without ENV variables yet).");
+    console.warn("WARNING: firebase-key.json not found!");
   }
 }
 
