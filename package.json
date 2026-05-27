@@ -13,6 +13,6 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "firebase-admin": "^13.9.0"
+    "firebase-admin": "^11.11.1"
   }
 }
