@@ -1,33 +1,46 @@
 const express = require('express'); 
 const cors = require('cors');       
-// 1. IMPORT FIREBASE ADMIN
 const admin = require('firebase-admin');
+
 const allowedOrigins = [
   'http://localhost:4200',      // Allows your laptop to test
   'https://fundscut.web.app',   // Allows your live website
   'https://fundscut.firebaseapp.com' // Firebase's backup URL
 ];
 
-// 🔥 THE SECRET VAULT CHECK (LOAD YOUR SECRET GOD KEY)
+// 🔥 THE BULLETPROOF SECRET VAULT CHECK
 let serviceAccount;
+
 if (process.env.FIREBASE_CREDENTIALS) {
-  // If running on Railway, it pulls the secret key from Railway's vault!
-  serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
+  // RAILWAY MODE: Pulls from the digital vault and fixes broken newline characters!
+  try {
+    const parsedKey = process.env.FIREBASE_CREDENTIALS.replace(/\\n/g, '\n');
+    serviceAccount = JSON.parse(parsedKey);
+  } catch (error) {
+    console.error("CRITICAL ERROR: Failed to parse FIREBASE_CREDENTIALS in Railway.", error);
+    process.exit(1); // Kill the server if the vault is broken
+  }
 } else {
-  // If running on your laptop, it just reads the local file.
-  serviceAccount = require('./firebase-key.json');
+  // LAPTOP MODE: Fails gracefully if the file is missing
+  try {
+    serviceAccount = require('./firebase-key.json');
+  } catch (error) {
+    console.warn("WARNING: firebase-key.json not found! (This is normal on Railway).");
+  }
 }
 
-
-// 3. INITIALIZE FIREBASE IN "GOD MODE"
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+// 3. INITIALIZE FIREBASE IN "GOD MODE" (Only if we found a key!)
+if (serviceAccount) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
 
 // 4. CREATE A VARIABLE TO TALK TO FIRESTORE
 const db = admin.firestore();
 
 const app = express(); 
+
 app.use(cors({
   origin: function (origin, callback) {
     // If the request comes from an allowed origin (or is internal), let it in!
@@ -38,59 +51,37 @@ app.use(cors({
     }
   }
 }));
+
 app.use(express.json()); 
 
-// ... keep your /api/test route and app.listen at the bottom! ...
-
 // ==========================================
-// 4. THE ROUTES (The Waiter's Menu)
-// This is where Angular will send requests.
+// THE ROUTES (The Waiter's Menu)
 // ==========================================
 
-// When Angular sends a GET request to 'http://localhost:3000/api/test', run this function!
+// 🔥 Railway Health Check Route
+app.get('/', (req, res) => {
+    res.send("🚀 FundsCut Backend is Live!");
+});
+
+// Test Route
 app.get('/api/test', (req, res) => {
-    
-    // req = The Request (What Angular asked for)
-    // res = The Response (What the Waiter sends back)
-
     console.log("Angular just knocked on the door!");
-
-    // Send a JSON message back to Angular
     res.json({ message: "Hello from the Node.js Waiter! Your backend is working!" });
 });
 
-// ==========================================
-// THE MENU ROUTE: Fetch all haircuts
-// ==========================================
+// Fetch all haircuts
 app.get('/api/services', async (req, res) => {
     try {
-        // 1. Point to the 'services' folder in Firestore
         const servicesRef = db.collection('services');
-        
-        // 2. Grab all the documents
         const snapshot = await servicesRef.get();
-        
-        // 3. Loop through them and build a clean array
-        const services = snapshot.docs.map(doc => {
-            return {
-                id: doc.id, // The Auto-ID
-                ...doc.data() // Spreads out name, price, duration, etc.
-            };
-        });
-
-        // 4. Send the clean array back to Angular!
+        const services = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         res.json(services);
-
     } catch (error) {
-        console.error("Error fetching services:", error);
-        // If it fails, send a 500 (Server Error) status back
         res.status(500).json({ error: "Failed to fetch services" });
     }
 });
 
-// ==========================================
-// 1. Fetch Available Times
-// ==========================================
+// Fetch Available Times
 app.get('/api/times', async (req, res) => {
     try {
         const scheduleRef = db.collection('settings').doc('schedule');
@@ -106,16 +97,11 @@ app.get('/api/times', async (req, res) => {
     }
 });
 
-// ==========================================
-// 2. Fetch Bookings by Date (For Clash Math)
-// ==========================================
-// Notice the ":dateString" -> This lets Angular pass a specific date in the URL!
+// Fetch Bookings by Date (For Clash Math)
 app.get('/api/bookings/date/:dateString', async (req, res) => {
     try {
-        const dateString = req.params.dateString; // Grabs the date from the URL
-        
+        const dateString = req.params.dateString; 
         const appointmentsRef = db.collection('appointments');
-        // God Mode query: "Give me all appointments matching this date"
         const snapshot = await appointmentsRef.where('dateString', '==', dateString).get();
         
         const bookings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -125,27 +111,20 @@ app.get('/api/bookings/date/:dateString', async (req, res) => {
     }
 });
 
-// ==========================================
-// 3. Save a New Booking (POST Request)
-// ==========================================
-// We use app.post() because Angular is SENDING data to us!
+// Save a New Booking (POST Request)
 app.post('/api/bookings', async (req, res) => {
     try {
-        const bookingData = req.body; // Grabs the JSON data Angular sent us
-
+        const bookingData = req.body; 
         const appointmentsRef = db.collection('appointments');
-        const docRef = await appointmentsRef.add(bookingData); // Saves it!
+        const docRef = await appointmentsRef.add(bookingData); 
         
-        // Send back the generated Auto-ID so Angular can use it for the EmailJS link!
         res.json({ id: docRef.id, message: "Booking successful!" });
     } catch (error) {
         res.status(500).json({ error: "Failed to save booking" });
     }
 });
 
-// ==========================================
-// 4. Fetch Bookings for Logged-In User
-// ==========================================
+// Fetch Bookings for Logged-In User
 app.get('/api/bookings/user/:email', async (req, res) => {
     try {
         const email = req.params.email;
@@ -159,10 +138,7 @@ app.get('/api/bookings/user/:email', async (req, res) => {
     }
 });
 
-// ==========================================
-// 5. Cancel a Booking (Move to Archive)
-// ==========================================
-// We use DELETE because we are removing it from the active database!
+// Cancel a Booking (Move to Archive)
 app.delete('/api/bookings/:id/cancel', async (req, res) => {
     try {
         const bookingId = req.params.id;
@@ -187,9 +163,7 @@ app.delete('/api/bookings/:id/cancel', async (req, res) => {
     }
 });
 
-// ==========================================
-// 6. Fetch ONE Booking by ID (For Cancel Page)
-// ==========================================
+// Fetch ONE Booking by ID (For Cancel Page)
 app.get('/api/bookings/:id', async (req, res) => {
     try {
         const bookingId = req.params.id;
@@ -207,10 +181,10 @@ app.get('/api/bookings/:id', async (req, res) => {
 });
 
 // ==========================================
-// 5. START THE SERVER (Open the Restaurant)
+// 5. START THE SERVER 
 // ==========================================
 const PORT = process.env.PORT || 3000; 
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Node.js Waiter is alive on port ${PORT}`);
 });
