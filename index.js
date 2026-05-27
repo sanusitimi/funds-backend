@@ -2,6 +2,11 @@ const express = require('express');
 const cors = require('cors');       
 // 1. IMPORT FIREBASE ADMIN
 const admin = require('firebase-admin');
+const allowedOrigins = [
+  'http://localhost:4200',      // Allows your laptop to test
+  'https://fundscut.web.app',   // Allows your live website
+  'https://fundscut.firebaseapp.com' // Firebase's backup URL
+];
 
 // 🔥 THE SECRET VAULT CHECK (LOAD YOUR SECRET GOD KEY)
 let serviceAccount;
@@ -23,7 +28,16 @@ admin.initializeApp({
 const db = admin.firestore();
 
 const app = express(); 
-app.use(cors()); 
+app.use(cors({
+  origin: function (origin, callback) {
+    // If the request comes from an allowed origin (or is internal), let it in!
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS security!')); // Blocks hackers!
+    }
+  }
+}));
 app.use(express.json()); 
 
 // ... keep your /api/test route and app.listen at the bottom! ...
